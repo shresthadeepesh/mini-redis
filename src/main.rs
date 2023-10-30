@@ -4,13 +4,11 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use log::info;
-use std::{
-    collections::HashMap, convert::Infallible, error::Error, net::SocketAddr, sync::Arc, thread,
-};
+use std::{collections::HashMap, convert::Infallible, error::Error, net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::service::{handle_delete, handle_get, handle_not_found, handle_set};
-use crate::store::{Data, RedisStore, Store};
+use crate::store::{Data, Store};
 
 pub mod service;
 pub mod store;
@@ -56,15 +54,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //             let mut store = store.lock().await;
     //             info!("Running cleanups....");
     //             // Sleep for 5 seconds
-    //             sleep(Duration::from_secs(1)).await;
+    //             sleep(Duration::from_secs(5)).await;
 
     //             store.cleanup_expired();
     //         }
     //     }
     // });
 
-    let server = Server::bind(&addr).serve(make_svc);
+    let ctrl_c = tokio::signal::ctrl_c();
+    let server = Server::bind(&addr)
+        .serve(make_svc)
+        .with_graceful_shutdown(async {
+            ctrl_c.await.expect("Failed to handle ctrl + c.");
+            info!("Shutting down the server, closing all connections.");
+        });
+
     server.await?;
+
+    info!("Server has been shutdown successfully.");
 
     Ok(())
 }
