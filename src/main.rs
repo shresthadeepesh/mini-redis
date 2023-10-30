@@ -4,16 +4,15 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use log::info;
-use serde::{Deserialize, Serialize};
-use serde_json::{from_str, Value};
 use std::{
     collections::HashMap, convert::Infallible, error::Error, net::SocketAddr, sync::Arc, thread,
-    time::Duration,
 };
-use tokio::{sync::Mutex, task, time::sleep};
+use tokio::sync::Mutex;
 
-use crate::store::store::{Data, RedisStore, Store};
+use crate::service::{handle_delete, handle_get, handle_not_found, handle_set};
+use crate::store::{Data, RedisStore, Store};
 
+pub mod service;
 pub mod store;
 
 async fn router(
@@ -68,90 +67,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
     server.await?;
 
     Ok(())
-}
-
-async fn handle_not_found() -> Result<Response<Body>, Infallible> {
-    let contents = "Not Found.";
-    let response = Response::builder().body(Body::from(contents)).unwrap();
-
-    Ok(response)
-}
-
-async fn handle_get(
-    req: Request<Body>,
-    store: Arc<Mutex<Store>>,
-) -> Result<Response<Body>, Infallible> {
-    let store = store.lock().await;
-
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
-
-    let data: GetRequest = serde_json::from_str(&body_str).unwrap();
-
-    info!("Getting key: ");
-    info!("{:?}", data);
-
-    let contents = store.get(data.key);
-
-    let response = Response::builder().body(Body::from(contents)).unwrap();
-
-    Ok(response)
-}
-
-async fn handle_set(
-    req: Request<Body>,
-    store: Arc<Mutex<Store>>,
-) -> Result<Response<Body>, Infallible> {
-    let mut store = store.lock().await;
-
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
-
-    let data: SetRequest = serde_json::from_str(&body_str).unwrap();
-
-    info!("Setting key: ");
-    info!("{:?}", data);
-
-    store.set(data.key, data.data, data.expires_in);
-
-    let response = Response::builder()
-        .body(Body::from("Completed..."))
-        .unwrap();
-
-    Ok(response)
-}
-
-async fn handle_delete(
-    req: Request<Body>,
-    store: Arc<Mutex<Store>>,
-) -> Result<Response<Body>, Infallible> {
-    let mut store = store.lock().await;
-
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
-
-    let data: GetRequest = serde_json::from_str(&body_str).unwrap();
-
-    info!("Deleting key: ");
-    info!("{:?}", data);
-
-    store.delete(data.key);
-
-    let response = Response::builder()
-        .body(Body::from("Completed..."))
-        .unwrap();
-
-    Ok(response)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GetRequest {
-    key: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SetRequest {
-    key: String,
-    data: String,
-    expires_in: u64,
 }
